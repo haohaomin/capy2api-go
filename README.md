@@ -1,9 +1,21 @@
 # capy2api
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
+[![Go](https://img.shields.io/badge/go-1.25-00ADD8.svg)](go.mod)
+[![Tests](https://img.shields.io/badge/tests-go%20test%20./...-success.svg)](.github/workflows/ci.yml)
+
 把 **Capy（capy.ai）** 的免费广告模型，转成 **OpenAI / Anthropic 兼容的 API**。
 不需要启动 Capy 桌面端，不需要云端额度，一个二进制 + 浏览器登录即可。
 
 > 供学习与自用研究。使用前请自行确认符合上游服务条款。
+
+## 界面预览
+
+![概览](docs/screenshots/overview.png)
+
+![模型与统计](docs/screenshots/models.png)
+
+![设置](docs/screenshots/settings.png)
 
 ## 特性
 

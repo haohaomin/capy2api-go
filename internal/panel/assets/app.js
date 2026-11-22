@@ -13,6 +13,10 @@ const state = {
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
+function shortHome(p) {
+  return String(p).replace(/^\/Users\/[^/]+/, '~').replace(/^\/home\/[^/]+/, '~');
+}
+
 function esc(v) {
   return String(v == null ? '' : v)
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -135,7 +139,7 @@ async function loadOverview() {
   $('#import-info').innerHTML = [
     ['本机会话', imp.available ? '<span class="pill ok">可导入</span>' : '<span class="pill bad">未找到</span>'],
     ['应用进程', imp.running ? '<span class="pill ok">运行中</span>' : '<span class="pill warn">未运行</span>'],
-    ['数据目录', imp.path || '—'],
+    ['数据目录', shortHome(imp.path || '—')],
   ].map(([k, v]) => `<div class="k">${esc(k)}</div><div class="v">${v}</div>`).join('');
 
   renderRecent(o.recent || []);
@@ -519,7 +523,7 @@ async function loadConfig() {
   f.workspace_mode.value = c.workspace_mode || 'worktree';
   f.workspace_root.value = c.workspace_root || '';
   f.allowed_models.value = (c.allowed_models || []).join(', ');
-  setText('#config-path', '配置文件：' + (data.path || 'config.json') + '（改端口/账号目录需重启进程）');
+  setText('#config-path', '配置文件：' + shortHome(data.path || 'config.json') + '（改端口/账号目录需重启进程）');
 }
 
 $('#config-form').addEventListener('submit', async (ev) => {
