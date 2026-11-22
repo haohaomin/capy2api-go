@@ -228,6 +228,9 @@ func (s *Server) handleAnthropic(w http.ResponseWriter, r *http.Request) {
 		writeAnthropicError(w, http.StatusBadGateway, "拉取模型目录失败: "+err.Error())
 		return
 	}
+	if s.queueBlocked(w) {
+		return
+	}
 	model, err := resolveModel(req.Model, models)
 	if err != nil {
 		writeAnthropicError(w, http.StatusBadRequest, err.Error())

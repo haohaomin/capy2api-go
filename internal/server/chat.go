@@ -195,6 +195,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if s.queueBlocked(w) {
+		return
+	}
 	t := tenantOf(r)
 	acc, err := s.accountFor(t)
 	if err != nil {
@@ -424,6 +427,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			s.log.Push(entry)
 			return
 		}
+		s.markQueue(false)
 		entry.Status = "ok"
 		entry.JamID = comp.Result.JamID
 		if !t.Master {
@@ -823,6 +827,7 @@ func (s *Server) failAccount(acc store.Account, err error) {
 
 func (s *Server) writeUpstreamError(w http.ResponseWriter, err error) {
 	if strings.Contains(err.Error(), "上游排队中") {
+		s.markQueue(true)
 		w.Header().Set("retry-after", "30")
 		writeAPIError(w, http.StatusTooManyRequests, err.Error(), "upstream_queued")
 		return

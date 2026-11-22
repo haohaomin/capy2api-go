@@ -20,10 +20,46 @@ type responsesRequest struct {
 	Input           json.RawMessage `json:"input"`
 	Instructions    string          `json:"instructions,omitempty"`
 	Stream          bool            `json:"stream"`
-	Tools           []toolDef       `json:"tools,omitempty"`
+	Tools           []responsesTool `json:"tools,omitempty"`
 	ToolChoice      json.RawMessage `json:"tool_choice,omitempty"`
 	Reasoning       *reasoningOpt   `json:"reasoning,omitempty"`
 	MaxOutputTokens *int            `json:"max_output_tokens,omitempty"`
+}
+
+// responsesTool 同时兼容 Responses 的扁平工具格式和 chat 的嵌套格式。
+type responsesTool struct {
+	Type        string          `json:"type"`
+	Name        string          `json:"name,omitempty"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+	Function    *struct {
+		Name        string          `json:"name"`
+		Description string          `json:"description"`
+		Parameters  json.RawMessage `json:"parameters"`
+	} `json:"function,omitempty"`
+}
+
+// toToolDefs 把 Responses 工具列表转成内部统一的 chat 工具定义。
+func responsesToolDefs(in []responsesTool) []toolDef {
+	out := make([]toolDef, 0, len(in))
+	for _, t := range in {
+		var d toolDef
+		d.Type = "function"
+		if t.Function != nil && t.Function.Name != "" {
+			d.Function.Name = t.Function.Name
+			d.Function.Description = t.Function.Description
+			d.Function.Parameters = t.Function.Parameters
+		} else {
+			d.Function.Name = t.Name
+			d.Function.Description = t.Description
+			d.Function.Parameters = t.Parameters
+		}
+		if d.Function.Name == "" {
+			continue
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 type responsesItem struct {
@@ -98,7 +134,7 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	chatReq := &chatRequest{
 		Model:      req.Model,
 		Messages:   messages,
-		Tools:      req.Tools,
+		Tools:      responsesToolDefs(req.Tools),
 		ToolChoice: req.ToolChoice,
 		Stream:     req.Stream,
 		Reasoning:  req.Reasoning,
@@ -111,6 +147,9 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	models, err := s.catalog(r.Context(), acc, false)
 	if err != nil {
 		writeAPIError(w, http.StatusBadGateway, "拉取模型目录失败: "+err.Error(), "upstream_error")
+		return
+	}
+	if s.queueBlocked(w) {
 		return
 	}
 	model, err := resolveModel(chatReq.Model, models)
@@ -165,9 +204,13 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	if cerr != nil {
 		entry.Error = cerr.Error()
 		s.log.Push(entry)
+		if strings.Contains(cerr.Error(), "上游排队中") {
+			s.markQueue(true)
+		}
 		s.writeUpstreamError(w, cerr)
 		return
 	}
+	s.markQueue(false)
 	entry.Status = "ok"
 	entry.JamID = comp.Result.JamID
 	entry.PromptTokens = comp.Usage.InputTokens
@@ -186,11 +229,13 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 			"type": "output_text", "text": comp.Content, "annotations": []any{},
 		}},
 	}}
-	for _, c := range comp.Calls {
+	fcIDs := make([]string, len(comp.Calls))
+	for i, c := range comp.Calls {
 		var input any = map[string]any{}
 		_ = json.Unmarshal([]byte(c.Function.Arguments), &input)
+		fcIDs[i] = "fc_" + shortID()
 		output = append(output, map[string]any{
-			"id": "fc_" + shortID(), "type": "function_call", "status": "completed",
+			"id": fcIDs[i], "type": "function_call", "status": "completed",
 			"call_id": c.ID, "name": c.Function.Name, "arguments": c.Function.Arguments, "input": input,
 		})
 	}
@@ -244,6 +289,30 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 		"type": "response.output_text.done", "item_id": messageID, "output_index": 0,
 		"content_index": 0, "text": comp.Content,
 	})
+	// 工具调用：Codex 走 Responses 流式协议，必须逐个下发 function_call 事件，
+	// 否则客户端拿不到 tool_calls，工具能力等于没有。
+	for i, c := range comp.Calls {
+		outputIndex := i + 1
+		fcID := fcIDs[i]
+		send("response.output_item.added", map[string]any{
+			"type": "response.output_item.added", "output_index": outputIndex,
+			"item": map[string]any{
+				"id": fcID, "type": "function_call", "status": "in_progress",
+				"call_id": c.ID, "name": c.Function.Name, "arguments": "",
+			},
+		})
+		send("response.function_call_arguments.delta", map[string]any{
+			"type":    "response.function_call_arguments.delta",
+			"item_id": fcID, "output_index": outputIndex, "delta": c.Function.Arguments,
+		})
+		send("response.output_item.done", map[string]any{
+			"type": "response.output_item.done", "output_index": outputIndex,
+			"item": map[string]any{
+				"id": fcID, "type": "function_call", "status": "completed",
+				"call_id": c.ID, "name": c.Function.Name, "arguments": c.Function.Arguments,
+			},
+		})
+	}
 	send("response.completed", map[string]any{"type": "response.completed", "response": body})
 }
 

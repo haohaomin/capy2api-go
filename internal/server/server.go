@@ -58,6 +58,8 @@ type Server struct {
 	daemonPtr *devicedaemon.Daemon
 	login     loginState
 	createSem chan struct{}
+	queueMu   sync.Mutex
+	queueTill time.Time
 	ctxMu     sync.Mutex
 	lastCtx   map[string]any
 	convos    *convRegistry
@@ -149,6 +151,29 @@ func (s *Server) recordContext(model string, res *capy.TurnResult) {
 	s.ctxMu.Lock()
 	s.lastCtx = snap
 	s.ctxMu.Unlock()
+}
+
+// queueBlocked 上游排队期间直接快速失败，避免每个请求都白等 30 秒。
+func (s *Server) queueBlocked(w http.ResponseWriter) bool {
+	s.queueMu.Lock()
+	till := s.queueTill
+	s.queueMu.Unlock()
+	if time.Now().Before(till) {
+		w.Header().Set("retry-after", fmt.Sprintf("%d", int(time.Until(till).Seconds())+1))
+		writeAPIError(w, http.StatusTooManyRequests, "上游正在排队，请稍后重试", "upstream_queued")
+		return true
+	}
+	return false
+}
+
+func (s *Server) markQueue(active bool) {
+	s.queueMu.Lock()
+	if active {
+		s.queueTill = time.Now().Add(30 * time.Second)
+	} else {
+		s.queueTill = time.Time{}
+	}
+	s.queueMu.Unlock()
 }
 
 // handleContext 透出上游注入的上下文构成：system/tools/mcp/skills/rules、本轮用过的工具、记忆拦截记录。
