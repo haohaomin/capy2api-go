@@ -1,0 +1,44 @@
+{
+  "listen": "127.0.0.1:7864",
+  "api_key": "sk-capy-REPLACE_WITH_RANDOM_32_BYTES",
+  "auth_dir": "auths",
+  "capy": {
+    "api_base": "https://api.capy.ai",
+    "clerk_base": "https://clerk.capy.ai",
+    "clerk_js_version": "6.43.0",
+    "client_features": "message-edit,visual,ads-models",
+    "client_surface": "web",
+    "client_timezone": "Asia/Shanghai",
+    "client_id": "",
+    "mode": "thread",
+    "thread_mode": "root",
+    "workspace": {
+      "mode": "worktree",
+      "root": "~/.capy/worktrees"
+    },
+    "device_daemon": true,
+    "device_workspace": "~/capy2api-workspace",
+    "device_policy": "text",
+    "device_token": "",
+    "device_id": "",
+    "reasoning": "",
+    "turn_timeout_sec": 360,
+    "queue_timeout_sec": 30,
+    "poll_interval_ms": 400,
+    "delete_after": true,
+    "max_concurrent": 2,
+    "pool_size": 2,
+    "max_tool_steps": 12,
+    "conversation_ttl_sec": 1800,
+    "reuse_conversation": true,
+    "memory_guard": true,
+    "realtime": true,
+    "typewriter": true,
+    "allowed_models": null,
+    "project_id": "",
+    "template_jam": ""
+  },
+  "panel": {
+    "refresh_sec": 5
+  }
+}

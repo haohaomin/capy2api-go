@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Capy2API 控制台</title>
+<link rel="stylesheet" href="/panel/style.css">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230b0b0d'/%3E%3Ctext x='16' y='22' font-size='16' text-anchor='middle' fill='%23f5c05a'%3EC%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+<div id="login" class="login hidden">
+  <form class="login-card" id="login-form">
+    <h1>Capy2API</h1>
+    <p class="muted">把 Capy 的广告赞助模型反代成 OpenAI / Anthropic 兼容接口</p>
+    <label>管理密钥
+      <input id="login-key" type="password" placeholder="config.json 里的 api_key" autocomplete="current-password" required>
+    </label>
+    <button type="submit" class="primary">进入控制台</button>
+    <p class="err" id="login-err"></p>
+  </form>
+</div>
+
+<div id="app" class="app hidden">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">C</span>
+      <div>
+        <div class="title">Capy2API</div>
+        <div class="sub" id="version">—</div>
+      </div>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="overview" class="active">概览</button>
+      <button data-tab="accounts">账号</button>
+      <button data-tab="keys">密钥</button>
+      <button data-tab="models">模型</button>
+      <button data-tab="settings">设置</button>
+      <button data-tab="logs">日志</button>
+    </nav>
+    <button class="ghost" id="logout">退出</button>
+  </header>
+
+  <main>
+    <section class="tab" id="tab-overview">
+      <div class="grid cards" id="stat-cards"></div>
+      <div class="grid two">
+        <div class="card">
+          <h2>客户端连接</h2>
+          <div class="kv" id="connect-info"></div>
+        </div>
+        <div class="card">
+          <h2>Capy 本机会话</h2>
+          <div class="kv" id="import-info"></div>
+          <div class="row">
+            <button class="primary" id="btn-browser-login">浏览器登录（免 App）</button>
+            <button class="ghost" id="btn-import">从 Capy.app 导入</button>
+          </div>
+          <p class="hint" id="browser-login-hint">点「浏览器登录」会打开一个独立 Chrome 窗口，你在里面正常登录 Capy（Google/邮箱都行），登录完成后自动导入，不用装 App。</p>
+          <p class="hint">读取 ~/Library/Application Support/Capy 的会话文件，并用钥匙串里的 Capy Safe Storage 解密。首次会弹一次钥匙串授权。</p>
+        </div>
+      </div>
+      <div class="card">
+        <h2>会话线程</h2>
+        <div class="kv" id="conv-info"></div>
+        <div class="row">
+          <button class="ghost" id="btn-cleanup-convs">立即清理全部会话线程</button>
+        </div>
+      </div>
+      <div class="card">
+        <h2>上游上下文构成（最近一次）</h2>
+        <div class="kv" id="ctx-info"></div>
+      </div>
+      <div class="card">
+        <h2>最近请求</h2>
+        <div class="table-wrap"><table id="recent-table"></table></div>
+      </div>
+    </section>
+
+    <section class="tab hidden" id="tab-accounts">
+      <div class="card">
+        <h2>账号池</h2>
+        <div class="table-wrap"><table id="accounts-table"></table></div>
+        <p class="hint">每个账号 = 一份 Capy 网页会话（__client cookie）+ 一个绑定设备。请求轮转使用；设备必须是运行着 Capy 桌面端的机器。</p>
+      </div>
+      <div class="card">
+        <h2>手动添加账号</h2>
+        <form id="account-form" class="form-grid">
+          <label>名称<input name="name" placeholder="例如 主账号"></label>
+          <label>__client cookie<input name="cookie" placeholder="eyJhbGciOi…（Clerk client JWT）" required></label>
+          <label>session id<input name="session_id" placeholder="sess_xxx（可留空自动发现）"></label>
+          <label>org id<input name="org_id" placeholder="org_xxx（留空自动选第一个）"></label>
+          <label>device id<input name="device_id" placeholder="device_xxx（设备执行必需）"></label>
+          <button class="primary" type="submit">添加并校验</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="tab hidden" id="tab-keys">
+      <div class="card">
+        <h2>订阅密钥</h2>
+        <div class="table-wrap"><table id="keys-table"></table></div>
+        <p class="hint">主密钥（config.api_key）不受配额限制；子密钥可设请求数/token 配额、RPM、并发、模型白名单与绑定账号。多租户隔离建议每个 key 绑定不同 Capy 账号。</p>
+      </div>
+      <div class="card">
+        <h2>新建密钥</h2>
+        <form id="key-form" class="form-grid">
+          <label>名称<input name="name" placeholder="例如 客户A" required></label>
+          <label>请求数配额（0=不限）<input name="quota_requests" type="number" value="0" min="0"></label>
+          <label>token 配额（0=不限）<input name="quota_tokens" type="number" value="0" min="0"></label>
+          <label>RPM（0=不限）<input name="rpm_limit" type="number" value="0" min="0"></label>
+          <label>并发上限（0=跟随全局）<input name="max_concurrent" type="number" value="0" min="0"></label>
+          <label>有效期天数（0=永久）<input name="ttl_days" type="number" value="0" min="0"></label>
+          <label class="span2">绑定账号（可留空共享池）<select name="account_id" id="key-account"></select></label>
+          <label class="span2">模型白名单（逗号分隔，留空=全部）<input name="allowed_models"></label>
+          <button class="primary" type="submit">生成密钥</button>
+        </form>
+        <p class="hint" id="key-created"></p>
+      </div>
+    </section>
+
+    <section class="tab hidden" id="tab-models">
+      <div class="card">
+        <div class="row between">
+          <h2>可用模型</h2>
+          <button class="ghost" id="btn-refresh-models">刷新</button>
+        </div>
+        <div class="table-wrap"><table id="models-table"></table></div>
+        <p class="hint">只列出 ads=true、auth=capy、路由解锁且价格全为 0 的模型；这些是广告赞助的免费模型。</p>
+      </div>
+      <div class="card">
+        <div class="row between">
+          <h2>请求统计（按模型）</h2>
+          <button class="ghost" id="btn-refresh-stats">刷新</button>
+        </div>
+        <div class="table-wrap"><table id="stats-table"></table></div>
+        <p class="hint" id="stats-since"></p>
+      </div>
+    </section>
+
+    <section class="tab hidden" id="tab-settings">
+      <div class="card">
+        <h2>运行参数</h2>
+        <form id="config-form" class="form-grid">
+          <label>管理密钥 api_key<input name="api_key"></label>
+          <label>执行模式
+            <select name="mode">
+              <option value="thread">thread（复用线程，无需 App 无需额度）</option>
+              <option value="web">web（云端项目，需额度）</option>
+              <option value="device">device（本机 Capy 桌面端）</option>
+            </select>
+          </label>
+          <label>线程类型
+            <select name="thread_mode">
+              <option value="root">root（独立根线程，不串上下文）</option>
+              <option value="side">side（子线程，会继承父线程上下文）</option>
+            </select>
+          </label>
+          <label>根线程池大小<input name="pool_size" type="number" min="1" max="20"></label>
+          <label>模板线程（side 模式用，留空自动选）<input name="template_jam" placeholder="jam_xxx"></label>
+          <label>项目 ID（web 模式，可留空自动建 Home）<input name="project_id" placeholder="project_xxx"></label>
+          <label>推理强度默认值
+            <select name="reasoning">
+              <option value="">跟随模型默认</option>
+              <option value="low">low</option>
+              <option value="medium">medium</option>
+              <option value="high">high</option>
+              <option value="max">max</option>
+            </select>
+          </label>
+          <label>回合超时（秒）<input name="turn_timeout_sec" type="number" min="30" max="1800"></label>
+          <label>轮询间隔（毫秒）<input name="poll_interval_ms" type="number" min="200" max="5000"></label>
+          <label>并发上限<input name="max_concurrent" type="number" min="1" max="16"></label>
+          <label>设备策略（决定 Agent 能否读写本地文件）
+            <select name="device_policy">
+              <option value="text">text（只回文本，不读不写，适合对外）</option>
+              <option value="readonly">readonly（可读工作区文件 + 只读命令）</option>
+              <option value="all">all（读写 + 任意命令，仅限本机）</option>
+            </select>
+          </label>
+          <label>排队判定（秒，0 关闭）<input name="queue_timeout_sec" type="number" min="0" max="300"></label>
+          <label>单回合工具轮次上限<input name="max_tool_steps" type="number" min="1" max="50"></label>
+          <label>会话线程 TTL（秒）<input name="conversation_ttl_sec" type="number" min="60" max="86400"></label>
+          <label>线程回收
+            <select name="delete_after"><option value="true">请求结束即删除</option><option value="false">保留线程</option></select>
+          </label>
+          <label>实时增量通道
+            <select name="realtime"><option value="true">开启（测首字延时/生成速度）</option><option value="false">关闭（纯轮询）</option></select>
+          </label>
+          <label>流式打字机
+            <select name="typewriter"><option value="true">开启（增量吐字）</option><option value="false">关闭（一次性）</option></select>
+          </label>
+          <label>工作目录策略
+            <select name="workspace_mode"><option value="worktree">worktree（每次新建目录）</option><option value="linked">linked（复用目录）</option></select>
+          </label>
+          <label>工作目录根<input name="workspace_root"></label>
+          <label class="span2">允许的模型（逗号分隔，留空=全部）<input name="allowed_models"></label>
+          <button class="primary" type="submit">保存</button>
+        </form>
+        <p class="hint" id="config-path"></p>
+      </div>
+    </section>
+
+    <section class="tab hidden" id="tab-logs">
+      <div class="card">
+        <div class="row between">
+          <h2>请求日志</h2>
+          <button class="ghost" id="btn-refresh-logs">刷新</button>
+        </div>
+        <div class="table-wrap"><table id="logs-table"></table></div>
+      </div>
+    </section>
+  </main>
+  <div class="toast hidden" id="toast"></div>
+</div>
+<script src="/panel/app.js"></script>
+</body>
+</html>

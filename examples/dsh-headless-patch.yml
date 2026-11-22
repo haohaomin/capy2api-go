@@ -1,0 +1,25 @@
+# 用 DSH headless 接 capy2api 的最小 patch：
+#   CAPY_API_KEY=<网关 api_key> dsh headless --patch examples/dsh-headless-patch.yml "只回答四个字：接入成功"
+- id: llm-pi-ai
+  name: '@deepseek-ai/dsh-llm-pi-ai'
+  config:
+    providers:
+      capy2api:
+        api: openai-completions
+        baseURL: http://127.0.0.1:7864/v1
+        apiKeyEnv: CAPY_API_KEY
+        models:
+          - id: deepseek/deepseek-v4.1-flash-ads
+            name: Capy DeepSeek V4.1 Flash
+            contextWindow: 1048576
+            maxTokens: 65536
+            input: [text, image]
+          - id: zai/glm-5.3-flash-ads
+            name: Capy GLM-5.3 Flash
+            contextWindow: 1048576
+            maxTokens: 65536
+- id: agent-default-model
+  name: '@deepseek-ai/dsh-agent-default-model'
+  config:
+    provider: capy2api
+    model: deepseek/deepseek-v4.1-flash-ads
