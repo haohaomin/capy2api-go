@@ -42,7 +42,7 @@ chmod +x capy2api-darwin-arm64
 ### 方式二：源码构建
 
 ```bash
-git clone https://github.com/<you>/capy2api
+git clone https://github.com/haohaomin/capy2api-go
 cd capy2api
 go build -o capy2api ./cmd/server
 ./capy2api
