@@ -43,6 +43,8 @@ type TurnOptions struct {
 	QueueTimeout time.Duration
 	// MaxSteps 工具轮次上限（0 用默认 12）：防止模型在无结果的情况下无限重试。
 	MaxSteps int
+	// OnTool 在平台工具调用开始时回调（用于把思考分段）。
+	OnTool func(string)
 	// OnStep 在每一步开始时回调（用于把多段思考分开）。
 	OnStep func()
 	// OnReason 是思考过程增量。
@@ -190,6 +192,7 @@ func (s *Session) RunTurn(ctx context.Context, opts TurnOptions) (*TurnResult, e
 		client.onText = opts.OnText
 		client.onReason = opts.OnReason
 		client.onStep = opts.OnStep
+		client.onTool = opts.OnTool
 		rt = client
 		go func() {
 			client.Loop(rctx)

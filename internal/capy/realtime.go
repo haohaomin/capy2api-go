@@ -34,6 +34,7 @@ type Realtime struct {
 	onText     func(string) // message_user 工具里的可见文本增量（工具模式的最终答案）
 	onReason   func(string) // 思考过程增量（reasoning-delta）
 	onStep     func()       // 新的步骤开始（用于分开多段思考）
+	onTool     func(string) // 工具调用开始（用于切断思考块）
 	started    time.Time    // 连接建立时间（调试用）
 	debug      bool
 	sawStep    bool
@@ -246,6 +247,11 @@ func (r *Realtime) handle(raw string, at time.Time) {
 		}
 	case "tool-call":
 		r.mark(at)
+		if cb := r.onTool; cb != nil {
+			if name, _ := event["name"].(string); name != "" && name != "message_user" {
+				cb(name)
+			}
+		}
 		if input, ok := event["input"].(map[string]any); ok {
 			if text, ok := input["text"].(string); ok && text != "" {
 				r.mu.Lock()

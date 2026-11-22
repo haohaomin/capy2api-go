@@ -334,7 +334,7 @@ func (s *Server) handleAnthropic(w http.ResponseWriter, r *http.Request) {
 
 	// 非流式：同步拿结果。
 	if !req.Stream {
-		comp, cerr := s.complete(ctx, acc, model, reasoning, prompt, nonce, choice, tools, true, files, "", false, false, nil, nil, nil, nil)
+		comp, cerr := s.complete(ctx, acc, model, reasoning, prompt, nonce, choice, tools, true, files, "", false, false, nil, nil, nil, nil, nil)
 		finishLog(comp, cerr)
 		if cerr != nil {
 			writeAnthropicError(w, http.StatusBadGateway, cerr.Error())
@@ -389,6 +389,7 @@ func (s *Server) handleAnthropic(w http.ResponseWriter, r *http.Request) {
 		onReason = func(text string) { pushKind("reasoning", text) }
 	}
 	onStep := func() { pushKind("step", "") }
+	onTool := func(name string) { pushKind("tool", name) }
 	var onDelta, onText func(string)
 	if len(tools) == 0 {
 		onDelta = push
@@ -407,7 +408,7 @@ func (s *Server) handleAnthropic(w http.ResponseWriter, r *http.Request) {
 	}
 	outCh := make(chan outcome, 1)
 	go func() {
-		c, e := s.complete(ctx, acc, model, reasoning, prompt, nonce, choice, tools, true, files, "", false, false, onDelta, onText, onReason, onStep)
+		c, e := s.complete(ctx, acc, model, reasoning, prompt, nonce, choice, tools, true, files, "", false, false, onDelta, onText, onReason, onStep, onTool)
 		outCh <- outcome{c, e}
 	}()
 
@@ -518,6 +519,11 @@ func (s *Server) handleAnthropic(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		case ev := <-deltaCh:
+			if ev.kind == "tool" {
+				// 工具调用是一个明确的边界：把当前思考块收掉，下一步会开新块。
+				closeBlock()
+				continue
+			}
 			if ev.kind == "step" {
 				// 新的一步：先把当前思考/正文块收尾，下一步会开新的块。
 				closeBlock()

@@ -197,7 +197,7 @@ func (s *Server) handleResponses(w http.ResponseWriter, r *http.Request) {
 	if len(images) > 0 {
 		prompt += fmt.Sprintf("\n\n（用户附带了 %d 张图片，已作为附件随消息上传，请结合图片内容回答。）", len(images))
 	}
-	comp, cerr := s.complete(ctx, acc, model, reasoning, prompt, nonce, choice, chatReq.Tools, true, files, "", false, false, nil, nil, nil, nil)
+	comp, cerr := s.complete(ctx, acc, model, reasoning, prompt, nonce, choice, chatReq.Tools, true, files, "", false, false, nil, nil, nil, nil, nil)
 	entry.DurationMS = time.Since(start).Milliseconds()
 	noteRequest(model.ID, cerr == nil, req.Stream, usageOf(comp), time.Since(start), resultOf(comp))
 	recordHealth(cerr == nil, time.Since(start))

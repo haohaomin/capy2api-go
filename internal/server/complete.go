@@ -36,7 +36,7 @@ func resultOf(c *completion) *capy.TurnResult {
 }
 
 // complete 跑一次上游回合并把模型输出解析成 OpenAI 语义。
-func (s *Server) complete(ctx context.Context, acc store.Account, model capy.Model, reasoning, prompt, nonce, choice string, tools []toolDef, parallel bool, files []capy.FileRef, existingJam string, keepThread, promptDelivered bool, onDelta, onText, onReason func(string), onStep func()) (*completion, error) {
+func (s *Server) complete(ctx context.Context, acc store.Account, model capy.Model, reasoning, prompt, nonce, choice string, tools []toolDef, parallel bool, files []capy.FileRef, existingJam string, keepThread, promptDelivered bool, onDelta, onText, onReason func(string), onStep func(), onTool func(string)) (*completion, error) {
 	// 新会话且伪造设备在线：直接建一条带 prompt 的根线程（Anthropic/Responses 路径不会走 chat.go 的池逻辑）。
 	if existingJam == "" && s.daemon() != nil && s.daemon().Status()["online"] == true &&
 		strings.ToLower(firstNonEmpty(acc.Mode, s.cfg().Capy.Mode, "thread")) == "thread" {
@@ -45,7 +45,7 @@ func (s *Server) complete(ctx context.Context, acc store.Account, model capy.Mod
 			promptDelivered = true
 		}
 	}
-	res, err := s.runTurn(ctx, acc, model, reasoning, prompt, "capy2api", files, existingJam, keepThread, promptDelivered, onDelta, onText, onReason, onStep)
+	res, err := s.runTurn(ctx, acc, model, reasoning, prompt, "capy2api", files, existingJam, keepThread, promptDelivered, onDelta, onText, onReason, onStep, onTool)
 	if err != nil {
 		return nil, err
 	}

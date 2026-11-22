@@ -348,6 +348,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	push := func(text string) { pushKind("content", text) }
 	onReason := func(text string) { pushKind("reasoning", text) }
 	onStep := func() { pushKind("step", "\n\n") }
+	onTool := func(name string) { pushKind("tool", name) }
 	var onDelta, onText func(string)
 	// 不管有没有 tools，最终答案都在 message_user 的 text 字段里；实时通道会逐段吐。
 	onText = push
@@ -383,7 +384,7 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		if serr == nil {
 			defer release()
 		}
-		comp, cerr := s.complete(ctx, acc, model, reasoning, prompt, nonce, choice, req.Tools, parallel, files, existingJam, existingJam != "" && (continued || convKey != ""), promptDelivered, onDelta, onText, onReason, onStep)
+		comp, cerr := s.complete(ctx, acc, model, reasoning, prompt, nonce, choice, req.Tools, parallel, files, existingJam, existingJam != "" && (continued || convKey != ""), promptDelivered, onDelta, onText, onReason, onStep, onTool)
 		ch <- turnOutcome{comp: comp, err: cerr}
 	}()
 
@@ -559,6 +560,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 			finish(nil, r.Context().Err())
 			return
 		case ev := <-deltaCh:
+			if ev.kind == "tool" {
+				emit(map[string]any{"reasoning_content": "\n\n—— 工具：" + ev.text + " ——\n\n"}, nil, nil)
+				continue
+			}
 			if ev.kind == "step" {
 				// 新一步：在思考流里插个分隔，客户端就能看出「一段思考 → 工具/正文」的边界。
 				emit(map[string]any{"reasoning_content": "\n\n"}, nil, nil)
@@ -755,7 +760,7 @@ func (s *Server) traceBlock(res *capy.TurnResult, reasoning string) map[string]a
 }
 
 // runTurn 走一次完整上游回合（受全局并发限制）。
-func (s *Server) runTurn(ctx context.Context, acc store.Account, model capy.Model, reasoning, prompt, title string, files []capy.FileRef, existingJam string, keepThread, promptDelivered bool, onDelta, onText, onReason func(string), onStep func()) (*capy.TurnResult, error) {
+func (s *Server) runTurn(ctx context.Context, acc store.Account, model capy.Model, reasoning, prompt, title string, files []capy.FileRef, existingJam string, keepThread, promptDelivered bool, onDelta, onText, onReason func(string), onStep func(), onTool func(string)) (*capy.TurnResult, error) {
 	select {
 	case s.sem <- struct{}{}:
 		defer func() { <-s.sem }()
@@ -798,6 +803,7 @@ func (s *Server) runTurn(ctx context.Context, acc store.Account, model capy.Mode
 		OnText:          onText,
 		OnReason:        onReason,
 		OnStep:          onStep,
+		OnTool:          onTool,
 		Realtime:        s.cfg().Capy.Realtime,
 	})
 	if err != nil {
